@@ -40,14 +40,13 @@ build args
 semsam_cfg = "configs/semantic_sam_only_sa-1b_swinL.yaml"
 seem_cfg = "configs/seem_focall_unicl_lang_v1.yaml"
 
-semsam_ckpt = "./swinl_only_sam_many2many.pth"
-sam_ckpt = "./sam_vit_h_4b8939.pth"
-seem_ckpt = "./seem_focall_v1.pt"
+semsam_ckpt = "./model_zoo/swinl_only_sam_many2many.pth"
+sam_ckpt = "./model_zoo/sam_vit_h_4b8939.pth"
+seem_ckpt = "./model_zoo/seem_focall_v1.pt"
 
 opt_semsam = load_opt_from_config_file(semsam_cfg)
 opt_seem = load_opt_from_config_file(seem_cfg)
 opt_seem = init_distributed_seem(opt_seem)
-
 
 '''
 build model
@@ -55,7 +54,6 @@ build model
 model_semsam = BaseModel(opt_semsam, build_model(opt_semsam)).from_pretrained(semsam_ckpt).eval().cuda()
 model_sam = sam_model_registry["vit_h"](checkpoint=sam_ckpt).eval().cuda()
 model_seem = BaseModel_Seem(opt_seem, build_model_seem(opt_seem)).from_pretrained(seem_ckpt).eval().cuda()
-
 with torch.no_grad():
     with torch.autocast(device_type='cuda', dtype=torch.float16):
         model_seem.model.sem_seg_head.predictor.lang_encoder.get_text_embeddings(COCO_PANOPTIC_CLASSES + ["background"], is_eval=True)

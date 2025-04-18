@@ -10,9 +10,11 @@ headers = {
     "Authorization": f"Bearer {api_key}"
 }
 
-metaprompt = '''
-- For any marks mentioned in your answer, please highlight them with [].
-'''    
+# metaprompt = '''
+# - For any marks mentioned in your answer, please highlight them with [].
+# '''    
+
+metaprompt = " Choose your answer from \"left\" and \"right\". Mark it with []. "
 
 # Function to encode the image
 def encode_image_from_file(image_path):
@@ -34,11 +36,12 @@ def prepare_inputs(message, image):
 
     payload = {
         "model": "gpt-4-vision-preview",
+        # "model": "gpt-4-all",
         "messages": [
         {
             "role": "system",
             "content": [
-                metaprompt
+                # metaprompt
             ]
         }, 
         {
@@ -46,7 +49,7 @@ def prepare_inputs(message, image):
             "content": [
             {
                 "type": "text",
-                "text": message, 
+                "text": message+metaprompt, 
             },
             {
                 "type": "image_url",
@@ -64,6 +67,8 @@ def prepare_inputs(message, image):
 
 def request_gpt4v(message, image):
     payload = prepare_inputs(message, image)
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+    response = requests.post("https://vip.DMXapi.com/v1/chat/completions", headers=headers, json=payload)
+    # import pdb
+    # pdb.set_trace()
     res = response.json()['choices'][0]['message']['content']
     return res
