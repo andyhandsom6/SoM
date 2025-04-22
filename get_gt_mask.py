@@ -63,7 +63,7 @@ model_semsam = BaseModel(opt_semsam, build_model(opt_semsam)).from_pretrained(se
         # model_seem.model.sem_seg_head.predictor.lang_encoder.get_text_embeddings(COCO_PANOPTIC_CLASSES + ["background"], is_eval=True)
 
 @torch.no_grad()
-def inference(image, slider = 1.5, mode = 'Automatic', alpha = 0.1, label_mode = 'Number', anno_mode = ['Mask', 'Mark'], *args, **kwargs):
+def inference(image, slider = 1.5, mode = 'Automatic', alpha = 0.1, label_mode = 'Number', anno_mode = ['Mark'], *args, **kwargs):
     # _image = image['background'].convert('RGB')
     # _mask = image['layers'][0].convert('L') if image['layers'] else None
     _image = image.convert('RGB')
@@ -131,24 +131,16 @@ def inference(image, slider = 1.5, mode = 'Automatic', alpha = 0.1, label_mode =
 
 if __name__ == "__main__":
     torch.backends.cudnn.enabled = False
-    input_path = "/home/llmnav/lianqi/SoM/0_33/images"
-    output_path = "/home/llmnav/lianqi/SoM/0_33_mask"
+    input_path = "/home/llmnav/lianqi/SoM/SYNTH-exp"
+    output_path = "/home/llmnav/lianqi/SoM/SYNTH-exp-gt-mark"
     os.makedirs(output_path, exist_ok=True)
-    woman_list = [
-        9, 8, 9, 8, 6, 3, 6, 4, 5, 3,
-        3, 3, 4, 5, 4, 4, 2, 3, 4, 2,
-        2, 1, 2, 3, 3, 6, 5, 4, 2, 6,
-        4, 6, 6, 3, 8, 4
-    ]
     for _, _, files in os.walk(input_path):
         for i, file in tqdm(enumerate(files)):
+            if not file.endswith('.jpg'):
+                continue
             image_path = os.path.join(input_path, file)
             image = Image.open(image_path)
             output, mask = inference(image)
             save_path = os.path.join(output_path, file)
-            masked_output = output.copy()
-            # masked_output[~mask[woman_list[i]-1]['segmentation']] = [0, 0, 0]
-            output = Image.fromarray(masked_output)
-            # import pdb
-            # pdb.set_trace()
+            output = Image.fromarray(output)
             output.save(save_path)

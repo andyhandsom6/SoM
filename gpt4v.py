@@ -14,7 +14,13 @@ headers = {
 # - For any marks mentioned in your answer, please highlight them with [].
 # '''    
 
-metaprompt = " Choose your answer from \"left\" and \"right\". Mark it with []. "
+metaprompt = " You should only give me **one** numerical mark, which can best represent the person you recognized. Highlight your answer with []. "
+
+# left_of_right_no_som: 
+# metaprompt = " Choose your answer from \"left\" and \"right\". Mark it with []. "
+
+# left_of_right_gt_mark:
+# metaprompt = " Choose your answer from \"[1]\" and \"[2]\". Remember to mark your answer with []. "
 
 # Function to encode the image
 def encode_image_from_file(image_path):
@@ -35,8 +41,10 @@ def prepare_inputs(message, image):
     base64_image = encode_image_from_pil(image)
 
     payload = {
-        "model": "gpt-4-vision-preview",
+        # "model": "gpt-4-vision-preview",
         # "model": "gpt-4-all",
+        # "model": "gpt-4-turbo-2024-04-09",
+        "model": "gpt-4o-2024-11-20",
         "messages": [
         {
             "role": "system",

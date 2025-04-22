@@ -34,9 +34,27 @@ def inference_semsam_m2m_auto(model, image, level, all_classes, all_parts, thres
             level=level,
         )
     outputs = mask_generator.generate(images)
-
+    # outputs is a list of dicts, each dict contains the following keys:
+    #   - segmentation: binary mask of the object. in form of np.array
+    #   - area: area of the object
+    #   - bbox: bounding box of the object. in form of list
+    #   - predicted_iou, point_coords, stability_score, crop_box
+    
     from task_adapter.utils.visualizer import Visualizer
     visual = Visualizer(image_ori, metadata=metadata)
+    
+    # H, W = image_ori.shape[:2]
+    # base = np.zeros((H, W), dtype=bool)
+    # left_half = base.copy()
+    # left_half[:, :W//2] = True
+    # right_half = base.copy()
+    # right_half[:, W//2:] = True
+    # sorted_anns = [{
+    #     'segmentation': left_half
+    # }, {
+    #     'segmentation': right_half
+    # }]
+    sorted_anns = []
     sorted_anns = sorted(outputs, key=(lambda x: x['area']), reverse=True)
     label = 1
     # for ann in sorted_anns:

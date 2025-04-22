@@ -12,11 +12,11 @@ import gradio as gr
 import torch
 import argparse
 
-# # seem
-# from seem.modeling.BaseModel import BaseModel as BaseModel_Seem
-# from seem.utils.distributed import init_distributed as init_distributed_seem
-# from seem.modeling import build_model as build_model_seem
-# from task_adapter.seem.tasks import interactive_seem_m2m_auto, inference_seem_pano, inference_seem_interactive
+# seem
+from seem.modeling.BaseModel import BaseModel as BaseModel_Seem
+from seem.utils.distributed import init_distributed as init_distributed_seem
+from seem.modeling import build_model as build_model_seem
+from task_adapter.seem.tasks import interactive_seem_m2m_auto, inference_seem_pano, inference_seem_interactive
 
 # semantic sam
 from semantic_sam.BaseModel import BaseModel
@@ -26,10 +26,10 @@ from semantic_sam.utils.arguments import load_opt_from_config_file
 from semantic_sam.utils.constants import COCO_PANOPTIC_CLASSES
 from task_adapter.semantic_sam.tasks import inference_semsam_m2m_auto, prompt_switch
 
-# # sam
-# from segment_anything import sam_model_registry
-# from task_adapter.sam.tasks.inference_sam_m2m_auto import inference_sam_m2m_auto
-# from task_adapter.sam.tasks.inference_sam_m2m_interactive import inference_sam_m2m_interactive
+# sam
+from segment_anything import sam_model_registry
+from task_adapter.sam.tasks.inference_sam_m2m_auto import inference_sam_m2m_auto
+from task_adapter.sam.tasks.inference_sam_m2m_interactive import inference_sam_m2m_interactive
 
 from scipy.ndimage import label
 import numpy as np
@@ -38,6 +38,7 @@ import os
 from PIL import Image
 import json
 from tqdm import tqdm
+import random
 
 os.environ["OPENAI_API_KEY"] = "sk-s7bZHTQvn4JjuTJTRWmPIk72L1HjBzQaUm8mxO0JhW6a4iq4"
 from gpt4v import request_gpt4v
@@ -53,18 +54,18 @@ sam_ckpt = "./model_zoo/sam_vit_h_4b8939.pth"
 seem_ckpt = "./model_zoo/seem_focall_v1.pt"
 
 opt_semsam = load_opt_from_config_file(semsam_cfg)
-# opt_seem = load_opt_from_config_file(seem_cfg)
-# opt_seem = init_distributed_seem(opt_seem)
+opt_seem = load_opt_from_config_file(seem_cfg)
+opt_seem = init_distributed_seem(opt_seem)
 
 '''
 build model
 '''
 model_semsam = BaseModel(opt_semsam, build_model(opt_semsam)).from_pretrained(semsam_ckpt).eval().cuda()
-# model_sam = sam_model_registry["vit_h"](checkpoint=sam_ckpt).eval().cuda()
-# model_seem = BaseModel_Seem(opt_seem, build_model_seem(opt_seem)).from_pretrained(seem_ckpt).eval().cuda()
-# with torch.no_grad():
-    # with torch.autocast(device_type='cuda', dtype=torch.float16):
-        # model_seem.model.sem_seg_head.predictor.lang_encoder.get_text_embeddings(COCO_PANOPTIC_CLASSES + ["background"], is_eval=True)
+model_sam = sam_model_registry["vit_h"](checkpoint=sam_ckpt).eval().cuda()
+model_seem = BaseModel_Seem(opt_seem, build_model_seem(opt_seem)).from_pretrained(seem_ckpt).eval().cuda()
+with torch.no_grad():
+    with torch.autocast(device_type='cuda', dtype=torch.float16):
+        model_seem.model.sem_seg_head.predictor.lang_encoder.get_text_embeddings(COCO_PANOPTIC_CLASSES + ["background"], is_eval=True)
 
 @torch.no_grad()
 def inference(image, slider = 1.5, mode = 'Automatic', alpha = 0.1, label_mode = 'Number', anno_mode = ['Mask', 'Mark'], *args, **kwargs):
@@ -115,21 +116,19 @@ def inference(image, slider = 1.5, mode = 'Automatic', alpha = 0.1, label_mode =
             model = model_semsam
             output, mask = inference_semsam_m2m_auto(model, _image, level, text, text_part, text_thresh, text_size, hole_scale, island_scale, semantic, label_mode=label_mode, alpha=alpha, anno_mode=anno_mode, *args, **kwargs)
 
-        else:
-            raise NotImplementedError
-        # elif model_name == 'sam':
-        #     model = model_sam
-        #     if mode == "Automatic":
-        #         output, mask = inference_sam_m2m_auto(model, _image, text_size, label_mode, alpha, anno_mode)
-        #     # elif mode == "Interactive":
-        #     #     output, mask = inference_sam_m2m_interactive(model, _image, spatial_masks, text_size, label_mode, alpha, anno_mode)
+        elif model_name == 'sam':
+            model = model_sam
+            if mode == "Automatic":
+                output, mask = inference_sam_m2m_auto(model, _image, text_size, label_mode, alpha, anno_mode)
+            # elif mode == "Interactive":
+            #     output, mask = inference_sam_m2m_interactive(model, _image, spatial_masks, text_size, label_mode, alpha, anno_mode)
 
-        # elif model_name == 'seem':
-        #     model = model_seem
-        #     if mode == "Automatic":
-        #         output, mask = inference_seem_pano(model, _image, text_size, label_mode, alpha, anno_mode)
-        #     # elif mode == "Interactive":
-        #     #     output, mask = inference_seem_interactive(model, _image, spatial_masks, text_size, label_mode, alpha, anno_mode)
+        elif model_name == 'seem':
+            model = model_seem
+            if mode == "Automatic":
+                output, mask = inference_seem_pano(model, _image, text_size, label_mode, alpha, anno_mode)
+            # elif mode == "Interactive":
+            #     output, mask = inference_seem_interactive(model, _image, spatial_masks, text_size, label_mode, alpha, anno_mode)
 
         return output, mask
 
@@ -145,92 +144,100 @@ def split_res(res):
     return res
 
 if __name__ == "__main__":
-    json_path = "/mnt/navid/SoM/SYNTH-exp-dgx/human_caption.json"
+    torch.backends.cudnn.enabled = False
+    json_path = "/home/llmnav/lianqi/SoM/human_caption.json"
     img_name, ins_name = "image_name", "caption_"
     with open(json_path, 'r') as f:
         data = json.load(f)
     # data has three attribute: file, instruction, and gt
-    folder = "/mnt/navid/SoM/SYNTH-exp-dgx"
-    output_folder = f"{folder}_mask"
+    folder = "/home/llmnav/lianqi/SoM/SYNTH-exp"
     
-    # result = 0
-    # episode_res = 0
-    # gpt_response = []
-    # som_error = 0
-    result = 214
-    episode_res = 86
-    gpt_response = []
-    som_error = 30
-    idx = 139
-    for item in tqdm(data[140:]):
-        idx += 1
-        if idx != 0 and idx % 20 == 0:
-            print(f"item {idx} finished.")
-            print(f"acc. = {result} / {2*idx} = {result/idx/2}")
-            print(f"episode_acc. = {episode_res} / {idx} = {episode_res/idx}")
-            print(f"current som error: {som_error}")
-        gpt_response_item = {}
-        image_path = os.path.join(folder, item[img_name])
-        name_without_suffix = os.path.splitext(item[img_name])[0]
-        image = Image.open(image_path)
-        try:
-            output, mask = inference(image)
-        except Exception as e:
-            print("Error Occured! SoM segmentation failed. ")
-            som_error += 2
-            output_saved = image
+    random.seed(42)
+    random.shuffle(data)
+    
+    
+    # for slider in [2.6]:
+    for slider in [1.3]:
+        output_folder = f"{folder}_1_3_mask_large_scale_refine_prompt"
+        os.makedirs(output_folder, exist_ok=True)
+        
+        result = 0
+        episode_res = 0
+        gpt_response = []
+        som_error = 0
+        idx = -1
+        for item in tqdm(data):
+            idx += 1
+            # if idx != 0 and idx % 20 == 0:
+            #     print(f"item {idx} finished.")
+            #     print(f"acc. = {result} / {2*idx} = {result/idx/2}")
+            #     print(f"episode_acc. = {episode_res} / {idx} = {episode_res/idx}")
+            #     print(f"current som error: {som_error}")
+            gpt_response_item = {}
+            image_path = os.path.join(folder, item[img_name])
+            name_without_suffix = os.path.splitext(item[img_name])[0]
+            image = Image.open(image_path)
+            try:
+                output, mask = inference(image, slider=slider)
+            except Exception as e:
+                print("Error Occured! SoM segmentation failed. ")
+                som_error += 2
+                output_saved = image
+                output_saved.save(
+                    os.path.join(output_folder, f"{name_without_suffix}_mark.jpg")
+                )
+                continue
+            output_image = Image.fromarray(output)
+            episode_success = 0
+            for direction in ["left", "right"]:
+                fail_tag = False
+                
+                instruction = item[ins_name+direction]
+                # import pdb
+                # pdb.set_trace()
+                try: 
+                    res = request_gpt4v(instruction, output_image)
+                except Exception as e:
+                    print("Error Occured! GPT-4V failed. ")
+                    continue
+                gpt_response_item[direction] = res
+                # find the seperate numbers in sentence res
+                num_list = split_res(res)
+                if len(num_list) != 1:
+                    som_error += 1
+                    print("Error Occured! Might because of som. response from gpt is: ", res)
+                    # print("num_list is: ", num_list, ". Trying again...")
+                    continue
+                try:
+                    coords = np.argwhere(mask[int(num_list[0])-1]['segmentation'])
+                except IndexError:
+                    print("Error Occured! Might because of GPT. response from gpt is: ", res)
+                    continue
+                mean_w_coords = coords[:, 1].mean()
+                if mean_w_coords < mask[0]['segmentation'].shape[1] // 2:
+                    gpt_ans = "left"
+                else:
+                    gpt_ans = "right"
+                result += int(gpt_ans == direction)
+                episode_success += int(gpt_ans == direction)
+                masked_output = output.copy()
+                masked_output[~mask[int(num_list[0])-1]['segmentation']] = [0, 0, 0]
+                output_saved = Image.fromarray(masked_output)
+                output_saved.save(
+                    os.path.join(output_folder, f"{name_without_suffix}_{direction}.jpg"))
+            if episode_success == 2:
+                episode_res += 1
+            output_saved = Image.fromarray(output)
             output_saved.save(
                 os.path.join(output_folder, f"{name_without_suffix}_mark.jpg")
             )
-            continue
-        output_image = Image.fromarray(output)
-        episode_success = 0
-        for direction in ["left", "right"]:
-            fail_tag = False
-            
-            instruction = item[ins_name+direction]
-            # import pdb
-            # pdb.set_trace()
-            try: 
-                res = request_gpt4v(instruction, output_image)
-            except Exception as e:
-                print("Error Occured! GPT-4V failed. ")
-                continue
-            gpt_response_item[direction] = res
-            # find the seperate numbers in sentence res
-            num_list = split_res(res)
-            if len(num_list) != 1:
-                som_error += 1
-                print("Error Occured! Might because of som. response from gpt is: ", res)
-                # print("num_list is: ", num_list, ". Trying again...")
-                continue
-            try:
-                coords = np.argwhere(mask[int(num_list[0])-1]['segmentation'])
-            except IndexError:
-                print("Error Occured! Might because of GPT. response from gpt is: ", res)
-                continue
-            mean_w_coords = coords[:, 1].mean()
-            if mean_w_coords < mask[0]['segmentation'].shape[1] // 2:
-                gpt_ans = "left"
-            else:
-                gpt_ans = "right"
-            result += int(gpt_ans == direction)
-            episode_success += int(gpt_ans == direction)
-            masked_output = output.copy()
-            masked_output[~mask[int(num_list[0])-1]['segmentation']] = [0, 0, 0]
-            output_saved = Image.fromarray(masked_output)
-            output_saved.save(
-                os.path.join(output_folder, f"{name_without_suffix}_{direction}.jpg"))
-        if episode_success == 2:
-            episode_res += 1
-        output_saved = Image.fromarray(output)
-        output_saved.save(
-            os.path.join(output_folder, f"{name_without_suffix}_mark.jpg")
-        )
-        gpt_response.append(gpt_response_item)
+            gpt_response.append(gpt_response_item)
     
-    print(f"acc. = {result} / {2*len(data)} = {result/len(data)/2}")
-    print(f"episode_acc. = {episode_res} / {len(data)} = {episode_res/len(data)}")
-    print(f"som_error = {som_error}")
-    with open(os.path.join(output_folder, "gpt_response.json"), 'w') as f:
-        json.dump(gpt_response, f)
+        print(f"slider = {slider}")
+        print(f"acc. = {result} / {2*len(data)} = {result/len(data)/2}")
+        print(f"episode_acc. = {episode_res} / {len(data)} = {episode_res/len(data)}")
+        print(f"som_error = {som_error}")
+        with open(os.path.join(output_folder, "gpt_response.json"), 'w') as f:
+            json.dump(gpt_response, f, indent=4)
+        with open(os.path.join(output_folder, "performance.json"), 'w') as f:
+            json.dump({"acc": result / len(data) / 2, "episode_acc": episode_res / len(data), "som_error": som_error}, f)

@@ -12,6 +12,8 @@ import gradio as gr
 import torch
 import argparse
 
+torch.backends.cudnn.enabled = False
+
 # seem
 from seem.modeling.BaseModel import BaseModel as BaseModel_Seem
 from seem.utils.distributed import init_distributed as init_distributed_seem
